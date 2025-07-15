@@ -3,21 +3,25 @@
 
 const int motorEnablePins[4] = {14, 27, 13, 12}; // Plants, left to right
 
-const int moistureSensorEnablePins[4] = {5, 5, 18, 19}; // 5 todo
+const int moistureSensorEnablePins[4] = {21, 5, 18, 19}; // 5 todo
 const int moistureSensorReadPin = 33;
 
 
-const int moistureCheckFrequency = 15 * 60 * 1000; // Every 15 minutes
-int targetMoisturePercs[4] = {0, 0, 30, 30};
+const int moistureCheckFrequency = 5 * 60 * 1000; // Every 15 minutes
+int targetMoisturePercs[4] = {50, 0, 50, 50};
 
 // Calibrations
 const int motorMLOffsets[4] = {718, 548, 1526, 1692}; // ms until water starts to flow out at the plant
 const int motorMLSlopes[4] = {37, 44, 61, 67}; // ms/mL: amount of ms one mL of water takes after the offset above
 const int moistureSensorMinima[4] = {0, 0, 0, 0}; // Defined as the value when in air
-const int moistureSensorMaxima[4] = {4096, 4096, 1024, 1024}; // Defined as the value when in pure water
+const int moistureSensorMaxima[4] = {995, 995, 900, 1024}; // Defined as the value when in pure water
 
 
 connectionManager ConnectionManager;
+
+
+const int stockVolume = 5000; // mL
+int waterVolumeInStock = stockVolume; // mL
 
 
 
@@ -60,7 +64,7 @@ void setup() {
                                           "\"description\": \"Sets text\""
                                           "}"
                                           "]");
-  //  ConnectionManager.setup(&onMessage, &onWiFiConnStateChange);
+  ConnectionManager.setup(&onMessage, &onWiFiConnStateChange);
 }
 
 String command;
@@ -69,16 +73,13 @@ int curMotor = -1;
 int duration = 0;
 unsigned long prevUpdate = 0;
 void loop() {
-  //  ConnectionManager.loop();
-  delay(1000);
+  ConnectionManager.loop();
 
   if (prevUpdate + moistureCheckFrequency < millis())
   {
     checkPlantMoisture();
     prevUpdate = millis();
   }
-
-
 
   if (Serial.available()) {
     command = Serial.readStringUntil('\n');
@@ -113,15 +114,17 @@ void loop() {
   }
 }
 
+int prevMoisturePercs[4];
 void checkPlantMoisture() {
+  int moisturePercs[4];
   for (int i = 0; i < sizeof(moistureSensorEnablePins) / sizeof(int); i++)
   {
-    int moisturePerc = readAveragedMoisture(i);
+    moisturePercs[i] = readAveragedMoisture(i);
     Serial.print("moisture ");
     Serial.print(i);
     Serial.print(": ");
-    Serial.print(moisturePerc);
-    if (moisturePerc >= targetMoisturePercs[i])
+    Serial.print(moisturePercs[i]);
+    if (moisturePercs[i] >= targetMoisturePercs[i])
     {
       Serial.print(" >= ");
       Serial.print(targetMoisturePercs[i]);
@@ -133,6 +136,32 @@ void checkPlantMoisture() {
       giveXMLWaterToPlantY(25, i);
     }
   }
+
+  bool changed = false;
+  for (int i = 0; i < sizeof(moistureSensorEnablePins) / sizeof(int); i++)
+  {
+    if (prevMoisturePercs[i] == moisturePercs[i]) continue;
+    changed = true;
+  }
+  if (!changed) 
+  {
+    Serial.println("Values have not changed.");
+    return;
+  }
+  
+  
+
+  String dataString = "{";
+  dataString.concat("\"type\": \"sensorState\", \"data\": [");
+  for (int i = 0; i < sizeof(moistureSensorEnablePins) / sizeof(int); i++)
+  {
+    if (i != 0) dataString.concat(",");
+    dataString.concat(String(moisturePercs[i]));
+  }
+  dataString.concat("]}");
+  ConnectionManager.send(dataString);
+  
+  for (int i = 0; i < sizeof(moistureSensorEnablePins) / sizeof(int); i++) prevMoisturePercs[i] = moisturePercs[i];
 }
 
 void giveXMLWaterToPlantY(int mL, int motorIndex) {
@@ -148,7 +177,34 @@ void giveXMLWaterToPlantY(int mL, int motorIndex) {
   digitalWrite(motorEnablePins[motorIndex], HIGH);
   delay(ms);
   digitalWrite(motorEnablePins[motorIndex], LOW);
+
+  waterVolumeInStock -= mL;
+
+  // Update Server
+  int stockPercentage = waterVolumeInStock * 100 / stockVolume;
+
+  String addedWaterValString = "[";
+  for (int i = 0; i < sizeof(moistureSensorEnablePins) / sizeof(int); i++)
+  {
+    if (i != 0) addedWaterValString += ",";
+    if (i == motorIndex) {
+      addedWaterValString += String(mL);
+    } else addedWaterValString += "0";
+  }
+  addedWaterValString += "]";
+
+  String dataString = "{";
+  dataString.concat("\"type\": \"waterState\",");
+  dataString.concat( "\"data\": {\"stockPerc\": ");
+  dataString.concat(String(stockPercentage));
+  dataString.concat(",");
+  dataString.concat("\"addedWaterVolumes\":");
+  dataString.concat(addedWaterValString);
+  dataString.concat("}}");
+
+  ConnectionManager.send(dataString);
 }
+
 
 int readAveragedMoisture(int index) {
   const int averageCount = 20;
