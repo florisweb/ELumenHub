@@ -1,6 +1,6 @@
-$fn = 25;
+$fn = 100;
 
-bottomThickness = 1;
+bottomThickness = 1.5;
 wallThickness = 1.5;
 
 
@@ -10,51 +10,131 @@ screwRadiusM3Smooth = 1.6;
 margin = 2;
 width = 75 + 1 + margin * 2 + wallThickness * 2;
 depth = 55 + 38.5 + margin * 2 + wallThickness * 2;
-height = bottomThickness + 1;
+height = 35;
 borderRadius = 7;
 
 connectorDepth = 20;
 
 
 
-difference() 
-{
-    difference() {
-        boxWithRoundedCorners(width, depth, height, borderRadius);
-        translate([wallThickness, wallThickness, bottomThickness])
-        boxWithRoundedCorners(width - wallThickness * 2, depth - wallThickness * 2, height, borderRadius);
+
+
+difference() {
+    union() {
+        bottom();
+//        translate([0, 0, 1.5])
+//        top();
     }
+    connectionHoles();
+}
+
+
+module top() {
+    difference() 
+    {
+        difference() {
+            boxWithRoundedCorners(width, depth, height, borderRadius);
+            
+            
+            difference() {
+                translate([wallThickness, wallThickness, -bottomThickness])
+                boxWithRoundedCorners(width - wallThickness * 2, depth - wallThickness * 2, height, borderRadius);
+                
+                // Add the pillars into which the screws will fit
+                
+                pillarSize = borderRadius * 1;
+                union() {
+                    cube([pillarSize, pillarSize, height]);
+
+                    translate([width - pillarSize, 0, 0])
+                    cube([pillarSize, pillarSize, height]);
+                    
+                    translate([width - pillarSize, depth - pillarSize, 0])
+                    cube([pillarSize, pillarSize, height]);
+                    
+                    translate([0, depth - pillarSize, 0])
+                    cube([pillarSize, pillarSize, height]);
+                }
+            }
+        }
+        union() 
+        {
+            translate([borderRadius, 0, 0])
+            cube([width - borderRadius * 2, bottomThickness * 2, max(height, 20) / 2]);
+
+            translate([width / 2 + 10, 0, max(height, 20) / 2])
+            cableHoles();
+            
+            translate([0, borderRadius, 0])
+            cube([wallThickness, connectorDepth, max(height, 17) - bottomThickness]);
+           
+        }
+    }
+
+   
+
     
    
-    translate([margin + 2, margin + connectorDepth + 10, bottomThickness])
-    contents();
+    difference() {
+        translate([0, borderRadius, height - bottomThickness])
+        rotate([0, 180, -90])
+        powerSocketHolder(connectorDepth, max(height, 17) - bottomThickness);
+        
+        translate([0, borderRadius, -bottomThickness])
+        cube([wallThickness, connectorDepth, max(height, 17)]);
+    }
 }
 
+module bottom() {
+    difference() 
+    {
+        boxWithRoundedCorners(width, depth, bottomThickness, borderRadius);
+        
+       
+        translate([margin + 2, margin + connectorDepth + 10, bottomThickness])
+        contents();
+    }
 
-difference() 
-{
-    translate([borderRadius, 0, 0])
-    cube([width - borderRadius * 2, bottomThickness, max(height, 20) / 2]);
 
-    translate([width / 2 + 10, 0, max(height, 20) / 2])
-    cableHoles();
+    difference() 
+    {
+        translate([borderRadius, 0, bottomThickness])
+        cube([width - borderRadius * 2, bottomThickness * 2, max(height, 20) / 2]);
 
+        translate([width / 2 + 10, 0, max(height, 20) / 2 + bottomThickness])
+        cableHoles();
+    }
+
+    translate([0, borderRadius + connectorDepth, bottomThickness])
+    rotate([0, 0, -90])
+    powerSocketHolder(connectorDepth, max(height, 17) - bottomThickness);
 }
 
-translate([0, borderRadius + connectorDepth, 0])
-rotate([0, 0, -90])
-powerSocketHolder(connectorDepth, max(height, 17));
-
+module connectionHoles() {
+    offset = borderRadius * .6;
+    translate([offset, offset, 0]) {
+        cylinder(r=screwRadiusM3, height);
+        
+        translate([width - offset * 2, 0, 0])
+        cylinder(r=screwRadiusM3, height);
+        
+        translate([width - offset * 2, depth - offset * 2, 0])
+        cylinder(r=screwRadiusM3, height);
+        
+        translate([0, depth - offset * 2, 0])
+        cylinder(r=screwRadiusM3, height);
+    }
+}
 
 
 
 
 module cableHoles() {
     translate([-15/2, 0, -2])
-    cube([15, wallThickness, 4]);
+    cube([15, 10, 4]);
 
     translate([15/2 + 5, 0, -2])
-    cube([4, wallThickness, 4]);
+    cube([4, 10, 4]);
 }
 
 
@@ -77,7 +157,7 @@ module relay() {
     translate([3, 8.5, -10])
     cylinder(r=screwRadiusM3, 20);
     
-    translate([relayWidth - 4, relayDepth - 6, -10])
+    translate([relayWidth - 6, relayDepth - 6, -10])
     cylinder(r=screwRadiusM3, 20);
 }
 
